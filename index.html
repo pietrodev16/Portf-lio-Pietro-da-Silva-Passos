@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>PACMAN RUN</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+	<link rel="stylesheet" href="style.css">
+</head>
+<body>
+	<main class="app-shell">
+		<header class="topbar">
+			<div class="brand-mark"><span class="brand-dot"></span>PACMAN RUN</div>
+			<div class="status-pill"><span class="status-light"></span><span id="session-status">ARCADE ONLINE</span></div>
+		</header>
+		<section class="game-layout" aria-label="Jogo Pacman">
+			<aside class="side-panel left-panel">
+				<div class="panel-label">PLAYER</div>
+				<div class="player-card"><div class="avatar" id="player-avatar">P</div><div><strong id="player-name">CADET</strong><span id="player-rank">RANK 01 / ROOKIE</span></div></div>
+				<div class="stat-block"><span class="panel-label">HIGH SCORE</span><strong id="high-score">000000</strong></div>
+				<div class="controls-block"><span class="panel-label">CONTROLS</span><div class="keys-row"><kbd>W</kbd><kbd>↑</kbd></div><div class="keys-row"><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>MOVE</span></div></div>
+			</aside>
+			<section class="game-column">
+				<div class="game-heading"><div><span class="eyebrow">SECTOR 01 / MAZE RUN</span><h1>PACMAN RUN</h1></div><div class="life-message" id="life-message" aria-live="polite"></div><button class="icon-button" id="pause-button" type="button" aria-label="Pausar jogo" title="Pausar jogo">Ⅱ</button></div>
+				<div class="game-frame"><canvas id="game-canvas" aria-label="Mapa do jogo"></canvas><div class="game-message" id="game-message"></div><div class="choice-panel" id="end-choice"><strong>RUN ENDED</strong><span>CONTINUE COM MAIS 2 VIDAS?</span><div class="choice-actions"><button class="primary-button" id="next-player-button" type="button">NEXT PLAYER <span>→</span></button><button class="secondary-button" id="continue-button" type="button">CONTINUE <span>→</span></button></div><form id="next-player-form"><input id="next-player-input" type="text" maxlength="12" placeholder="NOVO NOME" required><button class="primary-button" type="submit">START RUN <span>→</span></button></form></div></div>
+				<div class="game-footer"><span><i class="legend-dot pellet-legend"></i>DOTS <b id="dots-left">000</b></span><span><i class="legend-dot power-legend"></i>POWER MODE <b id="power-time">--</b></span><span class="lives" id="lives-display" aria-label="Vidas restantes"></span></div>
+			</section>
+			<aside class="side-panel right-panel"><div class="score-block"><span class="panel-label">CURRENT SCORE</span><strong id="score">000000</strong></div><div class="rank-panel"><div class="rank-title"><span class="panel-label">RANKING</span><span class="rank-icon">✦</span></div><ol id="leaderboard" class="leaderboard"></ol></div><button class="secondary-button" id="restart-button" type="button">↻ <span>NEW RUN</span></button></aside>
+		</section>
+	</main>
+	<div class="start-screen" id="start-screen"><div class="start-card"><div class="start-orbit"><div class="start-pacman"></div></div><span class="eyebrow">INSERT PLAYER ID</span><h2>READY TO RUN?</h2><p>Entre no labirinto. Colete tudo. Não deixe os ghosts te alcançarem.</p><form id="start-form"><label for="name-input">SEU NOME</label><div class="name-field"><input id="name-input" type="text" maxlength="12" autocomplete="off" placeholder="PLAYER ONE" required><span>/12</span></div><button class="primary-button" type="submit">START GAME <span>→</span></button></form><small>WASD ou SETAS para mover • 2 VIDAS • RANKING LOCAL</small></div></div>
+	<script src="script.js"></script>
+</body>
+</html>
