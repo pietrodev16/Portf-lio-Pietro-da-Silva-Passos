@@ -1,58 +1,162 @@
-const canvas = document.getElementById("game-canvas");
-const context = canvas.getContext("2d");
-const startScreen = document.getElementById("start-screen");
-const startForm = document.getElementById("start-form");
-const nameInput = document.getElementById("name-input");
-const message = document.getElementById("game-message");
-const scoreElement = document.getElementById("score");
-const highScoreElement = document.getElementById("high-score");
-const dotsElement = document.getElementById("dots-left");
-const powerElement = document.getElementById("power-time");
-const livesElement = document.getElementById("lives-display");
-const leaderboardElement = document.getElementById("leaderboard");
-const pauseButton = document.getElementById("pause-button");
-const restartButton = document.getElementById("restart-button");
-const endChoice = document.getElementById("end-choice");
-const continueButton = document.getElementById("continue-button");
-const nextPlayerButton = document.getElementById("next-player-button");
-const nextPlayerForm = document.getElementById("next-player-form");
-const nextPlayerInput = document.getElementById("next-player-input");
-const lifeMessage = document.getElementById("life-message");
-let audioContext = null;
-const maze = ["1111111111111111111111111111111", "1000000000000001000000000000001", "1011110111110101011111011110101", "1020000100000100010000010000201", "1011110111110111110111110111101", "1000000000000000000000000000001", "1011110111011110111101110111101", "1000010100010000100001000100001", "1111010111010111111101011101111", "1000000100010000000001000100001", "1011110111011110111101110111101", "1000000000000000100000000000001", "1011110111011110111101110111101", "1000000100010000000001000100001", "1111010111010111111101011101111", "1000010100010000100001000100001", "1011110111011110111101110111101", "1000000000000000000000000000001", "1011110111110111110111110111101", "1000000100000100010000010000001", "1011110111110101011111011110101", "1000000000000001000000000000001", "1111111111111111111111111111111"];
-const tileRows = maze.length; const tileColumns = maze[0].length; const directions = { up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } }; const startingGhosts = [{ x: 14, y: 11, color: "#ff4d82", direction: "left" }, { x: 16, y: 11, color: "#ff9f43", direction: "right" }, { x: 15, y: 12, color: "#a886ff", direction: "up" }];
-let state = null; let lastFrame = 0; let hudTimer = 0;
-const formatScore = (value) => String(value).padStart(6, "0");
-const storageScores = () => JSON.parse(localStorage.getItem("pacman-run-ranking-v2") || "[]");
-function ensureAudio() { if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)(); if (audioContext.state === "suspended") audioContext.resume(); }
-function playTone(frequency, duration, type = "square", gainValue = .035, slideTo = frequency) { if (!audioContext) return; const oscillator = audioContext.createOscillator(); const gain = audioContext.createGain(); const now = audioContext.currentTime; oscillator.type = type; oscillator.frequency.setValueAtTime(frequency, now); oscillator.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), now + duration); gain.gain.setValueAtTime(gainValue, now); gain.gain.exponentialRampToValueAtTime(.001, now + duration); oscillator.connect(gain).connect(audioContext.destination); oscillator.start(now); oscillator.stop(now + duration); }
-function playSound(name) { if (!audioContext) return; const sounds = { start: () => playTone(520, .12, "square", .04, 760), countdown: () => playTone(420, .08, "square", .025, 300), dot: () => playTone(620, .045, "square", .018, 700), power: () => { playTone(360, .12, "square", .035, 520); setTimeout(() => playTone(520, .12, "square", .03, 760), 80); }, death: () => { playTone(480, .18, "sawtooth", .035, 180); setTimeout(() => playTone(260, .25, "sawtooth", .03, 70), 150); }, ghost: () => playTone(800, .1, "square", .03, 440) }; if (sounds[name]) sounds[name](); }
-function saveScore() { if (!state || !state.playerName) return; const scores = storageScores().filter((entry) => entry.name !== state.playerName); scores.push({ name: state.playerName, score: state.score }); scores.sort((a, b) => b.score - a.score); localStorage.setItem("pacman-run-ranking-v2", JSON.stringify(scores.slice(0, 5))); }
-function renderRanking() { const scores = storageScores(); leaderboardElement.innerHTML = scores.length ? scores.map((entry) => `<li class="${state && entry.name === state.playerName ? "current" : ""}"><em>${entry.name}</em><b>${formatScore(entry.score)}</b></li>`).join("") : "<li><em>NO RUNS YET</em><b>------</b></li>"; }
-function resizeCanvas() { const bounds = canvas.getBoundingClientRect(); const ratio = window.devicePixelRatio || 1; canvas.width = Math.floor(bounds.width * ratio); canvas.height = Math.floor(bounds.height * ratio); context.setTransform(ratio, 0, 0, ratio, 0, 0); }
-function isWall(x, y) { return y < 0 || y >= tileRows || x < 0 || x >= tileColumns || maze[y][x] === "1"; } function canMove(entity, direction) { return !isWall(entity.x + direction.x, entity.y + direction.y); }
-function createDots() { const dots = new Set(); maze.forEach((row, y) => [...row].forEach((cell, x) => { if (cell !== "1" && !(x === 1 && y === 1) && !(x === 11 && y === 9)) dots.add(`${x},${y}`); })); return dots; }
-function newState(name) { return { playerName: name.toUpperCase(), score: 0, lives: 2, dots: createDots(), player: { x: 1, y: 1, direction: "right", nextDirection: "right", progress: 0 }, ghosts: startingGhosts.map((ghost) => ({ ...ghost, progress: 0, moveDirection: ghost.direction, nextDirection: ghost.direction })), paused: false, awaitingContinue: false, finished: false, countdown: 0, countdownTimer: 0, powerTimer: 0, mouth: 0 }; }
-function updateIdentity() { document.getElementById("player-name").textContent = state.playerName; document.getElementById("player-avatar").textContent = state.playerName[0]; document.getElementById("player-rank").textContent = "RANK 01 / RUNNER"; highScoreElement.textContent = formatScore(Math.max(...storageScores().map((entry) => entry.score), state.score, 0)); }
-function updateHud() { scoreElement.textContent = formatScore(state.score); dotsElement.textContent = String(state.dots.size).padStart(3, "0"); powerElement.textContent = state.powerTimer > 0 ? `${Math.ceil(state.powerTimer)}s` : "--"; livesElement.innerHTML = Array.from({ length: 2 }, (_, index) => `<i class="life-icon ${index < state.lives ? "active" : "lost"}"></i>`).join(""); updateIdentity(); }
-function beginCountdown() { state.countdown = 5; state.countdownTimer = 0; state.paused = true; lifeMessage.classList.add("visible", "countdown"); lifeMessage.textContent = "5"; playSound("start"); }
-function startGame(name) { ensureAudio(); state = newState(name.trim()); startScreen.classList.add("hidden"); message.classList.remove("visible"); lifeMessage.classList.remove("visible", "countdown"); lifeMessage.textContent = ""; endChoice.classList.remove("visible"); nextPlayerForm.classList.remove("visible"); document.getElementById("session-status").textContent = "GET READY"; renderRanking(); updateHud(); resizeCanvas(); beginCountdown(); }
-function resetRound() { state.player = { x: 1, y: 1, direction: "right", nextDirection: "right", progress: 0 }; state.ghosts = startingGhosts.map((ghost) => ({ ...ghost, progress: 0, moveDirection: ghost.direction, nextDirection: ghost.direction })); state.powerTimer = 0; }
-function endGame(won) { state.finished = true; saveScore(); renderRanking(); message.classList.remove("visible"); lifeMessage.classList.remove("visible"); if (won) { message.textContent = "MAZE CLEARED // PRESS NEW RUN"; message.classList.add("visible"); } else { endChoice.classList.add("visible"); } document.getElementById("session-status").textContent = won ? "SECTOR CLEARED" : "RUN ENDED"; }
-function loseLife() { playSound("death"); state.lives -= 1; updateHud(); if (state.lives <= 0) { endGame(false); return; } state.awaitingContinue = true; state.paused = true; lifeMessage.textContent = "LIFE LOST // PRESS SPACE TO CONTINUE"; lifeMessage.classList.add("visible"); }
-function continueAfterLife() { if (!state || !state.awaitingContinue) return; state.awaitingContinue = false; resetRound(); lifeMessage.classList.remove("countdown"); lifeMessage.textContent = ""; document.getElementById("session-status").textContent = "GET READY"; beginCountdown(); }
-function continueRun() { if (!state || !state.finished) return; state.lives = 2; state.finished = false; state.awaitingContinue = false; resetRound(); endChoice.classList.remove("visible"); document.getElementById("session-status").textContent = "GET READY"; updateHud(); beginCountdown(); }
-function moveEntity(entity, direction) { if (!canMove(entity, direction)) return false; entity.x += direction.x; entity.y += direction.y; entity.direction = Object.keys(directions).find((key) => directions[key] === direction) || entity.direction; return true; }
-function updatePlayer(delta) { const next = directions[state.player.nextDirection]; if (canMove(state.player, next)) state.player.direction = state.player.nextDirection; const current = directions[state.player.direction]; if (!canMove(state.player, current)) return; state.player.progress += delta * 6.12; if (state.player.progress < 1) return; state.player.progress = 0; moveEntity(state.player, current); const key = `${state.player.x},${state.player.y}`; if (state.dots.delete(key)) { state.score += 10; playSound("dot"); } if (maze[state.player.y][state.player.x] === "2") { state.score += 50; state.powerTimer = 8; state.dots.delete(key); playSound("power"); } if (state.dots.size === 0) endGame(true); }
-function opposite(direction) { return { up: "down", down: "up", left: "right", right: "left" }[direction]; } function distanceAfter(entity, direction) { return Math.abs(entity.x + direction.x - state.player.x) + Math.abs(entity.y + direction.y - state.player.y); }
-function chooseGhostDirection(ghost) { const current = directions[ghost.moveDirection]; const possible = Object.entries(directions).filter(([, direction]) => canMove(ghost, direction) && direction !== directions[opposite(ghost.moveDirection)]); const fallback = Object.entries(directions).filter(([, direction]) => canMove(ghost, direction)); const options = possible.length ? possible : fallback; if (!options.length) return false; options.sort((a, b) => distanceAfter(ghost, a[1]) - distanceAfter(ghost, b[1])); const chosen = state.powerTimer > 0 && Math.random() > .55 ? options[Math.floor(Math.random() * options.length)] : options[0]; ghost.nextDirection = chosen[0]; return true; }
-function entityPosition(entity) { const direction = directions[entity.moveDirection || entity.direction]; return { x: entity.x + direction.x * entity.progress, y: entity.y + direction.y * entity.progress }; }
-function entitiesOverlap(first, second) { const firstPosition = entityPosition(first); const secondPosition = entityPosition(second); const distanceX = firstPosition.x - secondPosition.x; const distanceY = firstPosition.y - secondPosition.y; return distanceX * distanceX + distanceY * distanceY < .6 * .6; }
-function handleGhostCollision(ghost) { if (!entitiesOverlap(state.player, ghost)) return false; if (state.powerTimer > 0) { state.score += 100; playSound("ghost"); ghost.x = 15; ghost.y = 12; ghost.progress = 0; ghost.moveDirection = "up"; ghost.direction = "up"; return true; } loseLife(); return true; }
-function updateGhosts(delta) { state.ghosts.forEach((ghost) => { if (state.awaitingContinue || state.finished) return; ghost.progress += delta * (state.powerTimer > 0 ? 2.805 : 3.825); while (ghost.progress >= 1) { ghost.progress -= 1; moveEntity(ghost, directions[ghost.moveDirection]); if (!chooseGhostDirection(ghost)) { ghost.progress = 0; return; } ghost.moveDirection = ghost.nextDirection; ghost.direction = ghost.moveDirection; } handleGhostCollision(ghost); }); }
-function draw() { const width = canvas.clientWidth; const height = canvas.clientHeight; const tileWidth = width / tileColumns; const tileHeight = height / tileRows; const radius = Math.min(tileWidth, tileHeight); context.clearRect(0, 0, width, height); context.fillStyle = "#050d16"; context.fillRect(0, 0, width, height); maze.forEach((row, y) => [...row].forEach((cell, x) => { const px = x * tileWidth; const py = y * tileHeight; if (cell === "1") { context.fillStyle = "#102e3d"; context.fillRect(px + 1, py + 1, tileWidth - 2, tileHeight - 2); context.strokeStyle = "#1c6070"; context.lineWidth = 1; context.strokeRect(px + 3, py + 3, tileWidth - 6, tileHeight - 6); } })); state.dots.forEach((key) => { const [x, y] = key.split(",").map(Number); context.fillStyle = "#ffd447"; context.beginPath(); context.arc((x + .5) * tileWidth, (y + .5) * tileHeight, radius * .09, 0, Math.PI * 2); context.fill(); }); drawPowerPellets(tileWidth, tileHeight, radius); drawCharacter(state.player, "#ffd447", tileWidth, tileHeight, radius, true); state.ghosts.forEach((ghost) => { const blinking = state.powerTimer > 0 && state.powerTimer <= 3 && Math.floor(state.powerTimer * 2) % 2 === 0; const color = state.powerTimer > 0 ? (blinking ? "#fff" : "#4d9fff") : ghost.color; drawCharacter(ghost, color, tileWidth, tileHeight, radius, false); }); }
-function drawPowerPellets(tileWidth, tileHeight, radius) { maze.forEach((row, y) => [...row].forEach((cell, x) => { if (cell !== "2") return; context.fillStyle = state.powerTimer > 0 ? "#fff" : "#ff4d82"; context.beginPath(); context.arc((x + .5) * tileWidth, (y + .5) * tileHeight, radius * (.18 + Math.sin(state.mouth) * .03), 0, Math.PI * 2); context.fill(); })); }
-function drawCharacter(entity, color, tileWidth, tileHeight, radius, pacman) { const direction = directions[pacman ? entity.direction : entity.moveDirection]; const x = (entity.x + .5 + direction.x * entity.progress) * tileWidth; const y = (entity.y + .5 + direction.y * entity.progress) * tileHeight; context.fillStyle = color; if (pacman) { const angle = { right: 0, down: Math.PI / 2, left: Math.PI, up: -Math.PI / 2 }[entity.direction]; const bite = .2 + Math.abs(Math.sin(state.mouth)) * .22; context.beginPath(); context.moveTo(x, y); context.arc(x, y, radius * .36, angle + bite, angle + Math.PI * 2 - bite); context.closePath(); context.fill(); } else { context.beginPath(); context.arc(x, y - radius * .03, radius * .32, Math.PI, 0); context.lineTo(x + radius * .32, y + radius * .3); context.lineTo(x + radius * .16, y + radius * .18); context.lineTo(x, y + radius * .3); context.lineTo(x - radius * .16, y + radius * .18); context.lineTo(x - radius * .32, y + radius * .3); context.closePath(); context.fill(); context.fillStyle = "#fff"; context.beginPath(); context.arc(x - radius * .11, y - radius * .04, radius * .08, 0, Math.PI * 2); context.arc(x + radius * .11, y - radius * .04, radius * .08, 0, Math.PI * 2); context.fill(); } }
-function gameLoop(time) { const delta = Math.min((time - lastFrame) / 1000, .05); lastFrame = time; if (state && state.countdown > 0 && startScreen.classList.contains("hidden")) { state.countdownTimer += delta; if (state.countdownTimer >= 1) { state.countdownTimer -= 1; state.countdown -= 1; if (state.countdown > 0) { lifeMessage.textContent = String(state.countdown); playSound("countdown"); } else { lifeMessage.classList.remove("visible", "countdown"); lifeMessage.textContent = ""; state.paused = false; document.getElementById("session-status").textContent = "RUN IN PROGRESS"; playSound("start"); } } } else if (state && !state.paused && !state.finished && !state.awaitingContinue && startScreen.classList.contains("hidden")) { state.mouth += delta * 12; if (state.powerTimer > 0) state.powerTimer -= delta; updatePlayer(delta); updateGhosts(delta); hudTimer += delta; if (hudTimer >= .1) { updateHud(); hudTimer = 0; } } if (state) draw(); requestAnimationFrame(gameLoop); }
-function togglePause() { if (!state || state.finished || state.awaitingContinue || state.countdown > 0) return; state.paused = !state.paused; pauseButton.textContent = state.paused ? "▶" : "Ⅱ"; message.textContent = state.paused ? "PAUSED // PRESS PLAY" : ""; message.classList.toggle("visible", state.paused); playSound(state.paused ? "countdown" : "start"); }
-startForm.addEventListener("submit", (event) => { event.preventDefault(); const name = nameInput.value.trim(); if (name) startGame(name); }); nextPlayerForm.addEventListener("submit", (event) => { event.preventDefault(); const name = nextPlayerInput.value.trim(); if (name) startGame(name); }); nextPlayerButton.addEventListener("click", () => { nextPlayerForm.classList.add("visible"); nextPlayerInput.focus(); }); continueButton.addEventListener("click", continueRun); document.addEventListener("keydown", (event) => { const keyMap = { ArrowUp: "up", KeyW: "up", ArrowDown: "down", KeyS: "down", ArrowLeft: "left", KeyA: "left", ArrowRight: "right", KeyD: "right" }; const direction = keyMap[event.code] || keyMap[event.key] || keyMap[event.key.toLowerCase()]; if (direction && state) { event.preventDefault(); state.player.nextDirection = direction; } if ((event.code === "Space" || event.key === " ") && state) { event.preventDefault(); if (state.awaitingContinue) continueAfterLife(); else if (!state.finished) togglePause(); } }); pauseButton.addEventListener("click", togglePause); restartButton.addEventListener("click", () => { if (state) { saveScore(); renderRanking(); startGame(state.playerName); } else nameInput.focus(); }); window.addEventListener("resize", resizeCanvas); nameInput.focus(); renderRanking(); requestAnimationFrame(gameLoop);
+const desktopPointer = window.matchMedia('(min-width: 769px) and (hover: hover) and (pointer: fine)');
+const sphere = document.querySelector('.sphere-3d');
+
+if (sphere && desktopPointer.matches) {
+    document.addEventListener('mousemove', (event) => {
+        const x = (window.innerWidth / 2 - event.pageX) / 40;
+        const y = (window.innerHeight / 2 - event.pageY) / 40;
+
+        sphere.style.marginLeft = `${x}px`;
+        sphere.style.marginTop = `${y}px`;
+    });
+}
+
+const constellationCanvas = document.querySelector('.constellation-background');
+const constellationContext = constellationCanvas?.getContext('2d');
+
+if (constellationCanvas && constellationContext) {
+    const constellations = [
+        {
+            name: 'Ursa Maior',
+            width: 130,
+            height: 90,
+            stars: [
+                { name: 'Dubhe', x: 0.78, y: 0.16 },
+                { name: 'Merak', x: 0.72, y: 0.73 },
+                { name: 'Phecda', x: 0.28, y: 0.68 },
+                { name: 'Megrez', x: 0.34, y: 0.18 },
+                { name: 'Alioth', x: 0.08, y: 0.14 },
+                { name: 'Mizar', x: 0.04, y: 0.53 },
+                { name: 'Alkaid', x: 0.02, y: 0.94 }
+            ],
+            lines: [[0, 1], [1, 2], [2, 3], [3, 0], [3, 4], [4, 5], [5, 6]]
+        },
+        {
+            name: 'Órion',
+            width: 105,
+            height: 135,
+            stars: [
+                { name: 'Betelgeuse', x: 0.12, y: 0.1 },
+                { name: 'Bellatrix', x: 0.84, y: 0.18 },
+                { name: 'Alnitak', x: 0.32, y: 0.48 },
+                { name: 'Alnilam', x: 0.49, y: 0.51 },
+                { name: 'Mintaka', x: 0.66, y: 0.54 },
+                { name: 'Saiph', x: 0.22, y: 0.92 },
+                { name: 'Rigel', x: 0.88, y: 0.88 },
+                { name: 'Meissa', x: 0.48, y: 0.02 },
+                { name: 'Theta Orionis', x: 0.54, y: 0.68 },
+                { name: 'Iota Orionis', x: 0.57, y: 0.8 }
+            ],
+            lines: [[7, 0], [7, 1], [0, 2], [1, 4], [2, 3], [3, 4], [2, 5], [4, 6], [3, 8], [8, 9]]
+        },
+        {
+            name: 'Cassiopeia',
+            width: 115,
+            height: 75,
+            stars: [
+                { name: 'Caph', x: 0.08, y: 0.18 },
+                { name: 'Schedar', x: 0.28, y: 0.82 },
+                { name: 'Gamma Cassiopeiae', x: 0.5, y: 0.28 },
+                { name: 'Ruchbah', x: 0.72, y: 0.83 },
+                { name: 'Segin', x: 0.94, y: 0.16 }
+            ],
+            lines: [[0, 1], [1, 2], [2, 3], [3, 4]]
+        }
+    ];
+
+    let width = 0;
+    let height = 0;
+    let lastFrame = 0;
+    let stars = [];
+    let formations = [];
+
+    const resizeConstellationCanvas = () => {
+        const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+        width = window.innerWidth;
+        height = window.innerHeight;
+        constellationCanvas.width = Math.round(width * pixelRatio);
+        constellationCanvas.height = Math.round(height * pixelRatio);
+        constellationContext.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+
+        const formationCount = Math.max(5, Math.ceil((width * height) / 80000));
+        formations = Array.from({ length: formationCount }, (_, index) => {
+            const constellation = constellations[index % constellations.length];
+            return {
+                constellation,
+                x: Math.random() * width,
+                y: Math.random() * height,
+                scale: 0.7 + Math.random() * 0.6,
+                speed: 2 + Math.random() * 3,
+                opacity: 0.13 + Math.random() * 0.15
+            };
+        });
+        stars = Array.from({ length: Math.ceil((width * height) / 7000) }, () => ({
+            x: Math.random() * width,
+            y: Math.random() * height,
+            radius: 0.4 + Math.random() * 0.8,
+            phase: Math.random() * Math.PI * 2,
+            speed: 0.6 + Math.random() * 1.4
+        }));
+    };
+
+    const drawConstellations = (timestamp) => {
+        const elapsed = lastFrame ? Math.min((timestamp - lastFrame) / 1000, 0.05) : 0;
+        lastFrame = timestamp;
+        constellationContext.clearRect(0, 0, width, height);
+
+        for (const star of stars) {
+            star.phase += elapsed * star.speed;
+            const glow = 0.35 + (Math.sin(star.phase) + 1) * 0.25;
+            constellationContext.beginPath();
+            constellationContext.fillStyle = `rgba(245, 248, 255, ${glow})`;
+            constellationContext.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
+            constellationContext.fill();
+        }
+
+        for (const formation of formations) {
+            const { constellation } = formation;
+            formation.x += formation.speed * elapsed;
+
+            if (formation.x - constellation.width * formation.scale > width + 20) {
+                formation.x = -constellation.width * formation.scale - 20;
+                formation.y = Math.random() * height;
+            }
+
+            constellationContext.strokeStyle = `rgba(218, 228, 245, ${formation.opacity})`;
+            constellationContext.lineWidth = 0.8;
+            constellationContext.beginPath();
+            for (const [from, to] of constellation.lines) {
+                const start = constellation.stars[from];
+                const end = constellation.stars[to];
+                constellationContext.moveTo(
+                    formation.x + start.x * constellation.width * formation.scale,
+                    formation.y + start.y * constellation.height * formation.scale
+                );
+                constellationContext.lineTo(
+                    formation.x + end.x * constellation.width * formation.scale,
+                    formation.y + end.y * constellation.height * formation.scale
+                );
+            }
+            constellationContext.stroke();
+
+            for (const star of constellation.stars) {
+                const x = formation.x + star.x * constellation.width * formation.scale;
+                const y = formation.y + star.y * constellation.height * formation.scale;
+                constellationContext.beginPath();
+                constellationContext.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                constellationContext.arc(x, y, 1.4, 0, Math.PI * 2);
+                constellationContext.fill();
+                constellationContext.beginPath();
+                constellationContext.fillStyle = 'rgba(255, 255, 255, 0.12)';
+                constellationContext.arc(x, y, 4, 0, Math.PI * 2);
+                constellationContext.fill();
+            }
+        }
+
+        window.requestAnimationFrame(drawConstellations);
+    };
+
+    resizeConstellationCanvas();
+    window.addEventListener('resize', resizeConstellationCanvas);
+    window.requestAnimationFrame(drawConstellations);
+}
